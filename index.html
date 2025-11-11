@@ -271,7 +271,84 @@
         function displayDailyReport(data, employees) { const outputDiv = document.getElementById('daily-report-output'); const tableContainer = document.getElementById('daily-report-table-container'); const actionsContainer = document.getElementById('daily-report-actions'); if (data.length === 0) { tableContainer.innerHTML = "<p>No records found.</p>"; actionsContainer.innerHTML = ""; } else { const empMap = new Map(employees.map(e => [e.id, e.Name])); let table = `<table id="dailyReportTable" class="report-table"><thead><tr><th>ID</th><th>Name</th><th>In Time</th><th>Out Time</th></tr></thead><tbody>`; data.forEach(rec => { table += `<tr><td>${rec.employeeId}</td><td>${empMap.get(rec.employeeId) || 'N/A'}</td><td>${rec.markIn.toLocaleTimeString()}</td><td>${rec.markOut ? rec.markOut.toLocaleTimeString() : 'N/A'}</td></tr>`; }); table += '</tbody></table>'; tableContainer.innerHTML = table; actionsContainer.innerHTML = `<button class="btn" onclick="downloadTableAsPDF('dailyReportTable', 'Daily_Report')">PDF</button> <button class="btn" onclick="downloadTableAsExcel('dailyReportTable', 'Daily_Report')">Excel</button>`; } outputDiv.style.display = 'block'; }
         
         document.getElementById('generateReportBtn').addEventListener('click', async () => { const startDate = new Date(document.getElementById('startDate').value); const endDate = new Date(document.getElementById('endDate').value); endDate.setHours(23, 59, 59, 999); const { allAttendance, allEmployees } = await fetchAllDataForReport(); const filteredData = allAttendance.filter(rec => rec.markIn >= startDate && rec.markIn <= endDate); displayPayrollReport(filteredData, allEmployees); });
-        function displayPayrollReport(data, employees) { const outputDiv = document.getElementById('report-output'); const tableContainer = document.getElementById('report-table-container'); const actionsContainer = document.getElementById('report-actions'); const payrollSummary = {}; employees.forEach(emp => { payrollSummary[emp.id] = { name: emp.Name, dept: emp.DEPT || 'N/A', totalDays: 0 }; }); data.forEach(rec => { if (payrollSummary[rec.employeeId] && rec.markIn && rec.markOut) { const durationHours = (rec.markOut - rec.markIn) / 3600000; if (durationHours >= 6) { payrollSummary[rec.employeeId].totalDays += 1; } else if (durationHours > 0) { payrollSummary[rec.employeeId].totalDays += 0.5; } } }); if (employees.length === 0) { tableContainer.innerHTML = "<p>No employees found.</p>"; actionsContainer.innerHTML = ""; } else { let table = `<table id="payrollReportTable" class="report-table"><thead><tr><th class="col-id">ID</th><th>Name</th><th class="col-dept">Dept</th><th class="col-days">Total Days</th></tr></thead><tbody>`; for (const empId in payrollSummary) { const empData = payrollSummary[empId]; table += `<tr><td>${empId}</td><td>${empData.name}</td><td>${empData.dept}</td><td>${empData.totalDays}</td></tr>`; } table += '</tbody></table>'; tableContainer.innerHTML = table; actionsContainer.innerHTML = `<button class="btn" onclick="downloadTableAsPDF('payrollReportTable', 'Payroll_Summary_Report')">PDF</button> <button class="btn" onclick="downloadTableAsExcel('payrollReportTable', 'Payroll_Summary_Report')">Excel</button>`; } outputDiv.style.display = 'block'; }
+        function displayPayrollReport(data, employees) {
+    const outputDiv = document.getElementById('report-output');
+    const tableContainer = document.getElementById('report-table-container');
+    const actionsContainer = document.getElementById('report-actions');
+    const payrollSummary = {};
+
+    employees.forEach(emp => {
+        // Initialize structures for both days and hours for all employees
+        payrollSummary[emp.id] = { 
+            name: emp.Name, 
+            dept: emp.DEPT || 'N/A', 
+            totalDays: 0,
+            totalMilliseconds: 0 // New field to track total time
+        };
+    });
+
+    data.forEach(rec => {
+        if (payrollSummary[rec.employeeId] && rec.markIn && rec.markOut) {
+            const durationMs = rec.markOut - rec.markIn;
+            
+            // --- NEW LOGIC: Calculate both days and hours ---
+            if (durationMs > 0) {
+                // Always add the raw time for PT employees
+                payrollSummary[rec.employeeId].totalMilliseconds += durationMs;
+
+                // Calculate days for non-PT employees
+                const durationHours = durationMs / 3600000;
+                if (durationHours >= 6) {
+                    payrollSummary[rec.employeeId].totalDays += 1;
+                } else {
+                    payrollSummary[rec.employeeId].totalDays += 0.5;
+                }
+            }
+        }
+    });
+
+    if (employees.length === 0) {
+        tableContainer.innerHTML = "<p>No employees found.</p>";
+        actionsContainer.innerHTML = "";
+    } else {
+        // --- MODIFICATION: Dynamically change the last column header and data ---
+        let table = `<table id="payrollReportTable" class="report-table">
+                        <thead>
+                            <tr>
+                                <th class="col-id">ID</th>
+                                <th>Name</th>
+                                <th class="col-dept">Dept</th>
+                                <th class="col-days">Total (Days/Hours)</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+        
+        for (const empId in payrollSummary) {
+            const empData = payrollSummary[empId];
+            let summaryValue;
+
+            // Check if the employee is in the 'PT' department
+            if (empData.dept.toUpperCase() === 'PT') {
+                const totalHours = (empData.totalMilliseconds / 3600000).toFixed(2);
+                summaryValue = `${totalHours} hrs`; // Format as hours
+            } else {
+                summaryValue = empData.totalDays; // Use total days for everyone else
+            }
+            
+            table += `<tr>
+                        <td>${empId}</td>
+                        <td>${empData.name}</td>
+                        <td>${empData.dept}</td>
+                        <td>${summaryValue}</td>
+                      </tr>`;
+        }
+        
+        table += '</tbody></table>';
+        tableContainer.innerHTML = table;
+        actionsContainer.innerHTML = `<button class="btn" onclick="downloadTableAsPDF('payrollReportTable', 'Payroll_Summary_Report')">PDF</button> <button class="btn" onclick="downloadTableAsExcel('payrollReportTable', 'Payroll_Summary_Report')">Excel</button>`;
+    }
+    outputDiv.style.display = 'block';
+}
         
         document.getElementById('generateDetailedReportBtn').addEventListener('click', async () => { const employeeId = document.getElementById('detailedEmployeeId').value.trim().toUpperCase(); const monthYear = document.getElementById('reportMonth').value; if (!employeeId || !monthYear) { return alert('Please provide ID and month.'); } const [year, month] = monthYear.split('-'); const { allAttendance, allEmployees } = await fetchAllDataForReport(); const employeeInfo = allEmployees.find(emp => emp.id === employeeId); if (!employeeInfo) { return alert('Employee ID not found.'); } const employeeRecords = allAttendance.filter(rec => { const recDate = rec.markIn; return rec.employeeId === employeeId && recDate.getFullYear() == year && (recDate.getMonth() + 1) == parseInt(month); }); displayDetailedReport(employeeRecords, employeeInfo, monthYear); });
         function displayDetailedReport(data, employeeInfo, monthYear) { const outputDiv = document.getElementById('detailed-report-output'); const summaryContainer = document.getElementById('detailed-report-summary'); const tableContainer = document.getElementById('detailed-report-table-container'); const actionsContainer = document.getElementById('detailed-report-actions'); outputDiv.style.display = 'block'; if (data.length === 0) { summaryContainer.innerHTML = `<p>No records found for ${employeeInfo.Name} (${employeeInfo.id}) for this month.</p>`; tableContainer.innerHTML = ""; actionsContainer.innerHTML = ""; return; } let totalMilliseconds = 0; let tableHTML = `<table id="detailedReportTable" class="report-table"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th></tr></thead><tbody>`; data.sort((a, b) => a.markIn - b.markIn); data.forEach(rec => { const markInTime = rec.markIn; const markOutTime = rec.markOut; let durationStr = 'N/A'; if (markOutTime) { const durationMs = markOutTime - markInTime; totalMilliseconds += durationMs; const hours = Math.floor(durationMs / 3600000); const minutes = Math.floor((durationMs % 3600000) / 60000); durationStr = `${hours}h ${minutes}m`; } tableHTML += `<tr><td>${rec.date}</td><td>${markInTime.toLocaleTimeString()}</td><td>${markOutTime ? markOutTime.toLocaleTimeString() : 'N/A'}</td><td>${durationStr}</td></tr>`; }); tableHTML += '</tbody></table>'; const totalHours = totalMilliseconds / 3600000; const avgHours = data.length > 0 ? totalHours / data.length : 0; summaryContainer.innerHTML = `<p><strong>Employee:</strong> ${employeeInfo.Name} (${employeeInfo.id})</p><p><strong>Total Days:</strong> ${data.length}</p><p><strong>Total Hours:</strong> ${totalHours.toFixed(2)}</p><p><strong>Avg Hours:</strong> ${avgHours.toFixed(2)}</p>`; tableContainer.innerHTML = tableHTML; const reportTitle = `Detailed_Report_${employeeInfo.id}_${monthYear}`; actionsContainer.innerHTML = `<button class="btn" onclick="downloadDetailedPDF('${reportTitle}')">PDF</button> <button class="btn" onclick="downloadDetailedExcel('${reportTitle}')">Excel</button>`; }
@@ -295,40 +372,5 @@
         }
     });
     </script>
-    
-    <!--
-    =================================
-    === TESTING CHECKLIST (2 Devices) ===
-    =================================
-    Objective: Verify that an attendance record created on Device A is instantly visible on Device B.
-
-    1. Setup:
-       - Open the deployed web app on two different devices (e.g., your computer and your phone).
-       - On both devices, navigate to the Admin Panel and go to the "Dashboard" tab.
-    
-    2. Mark Attendance (Device A):
-       - On Device A (e.g., your phone), go to the employee portal.
-       - Enter a valid Employee ID (e.g., EMP001) and click "Check Status".
-       - Click "Mark In". You should see a success message.
-    
-    3. Verify on Device B (Real-Time):
-       - Look at the Admin Panel on Device B (your computer).
-       - The "Currently In" count should instantly increase by 1.
-       - The employee's name (EMP001) should instantly appear in the "Currently In" list.
-       - There should be no need to manually refresh the page on Device B.
-    
-    4. Mark Out (Device A):
-       - On Device A, click the "Mark Out" button for the same employee.
-       - You should see a "Goodbye" message.
-
-    5. Verify on Device B (Real-Time again):
-       - Look at the Admin Panel on Device B.
-       - The "Currently In" count should instantly decrease by 1.
-       - The "Checked Out" count should instantly increase by 1.
-       - The employee's name should move from the "In" list to the "Out" list.
-
-    If all these steps work instantly without manual refreshes, the date format bug is fixed.
-    -->
-
-</body>
+    </body>
 </html>
