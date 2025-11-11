@@ -137,7 +137,7 @@
         </div>
         <main class="main-content">
             <div id="dashboard" class="page active"><div id="live-dashboard-container" class="dashboard-grid"></div></div>
-            <div id="analytics" class="page"><div class="card"><div style="height: 400px;"><canvas id="attendanceChart"></canvas></div></div></div>
+            <div id="analytics" class="page"><div class="card"><div style="height: 500px;"><canvas id="attendanceChart"></canvas></div></div></div>
             <div id="reports" class="page">
                 <div class="card"><h2>Manual Attendance Entry</h2><div class="form-group"><label>Employee ID</label><input type="text" id="manualEmpId"></div><div class="form-group"><label>Date</label><input type="date" id="manualDate"></div><div class="form-group"><label>Mark In Time</label><input type="time" id="manualTimeIn"></div><div class="form-group"><label>Mark Out Time</label><input type="time" id="manualTimeOut"></div><button id="manualSaveBtn" class="btn">Save Entry</button></div>
                 <div class="card"><h2>Daily Attendance Report</h2><div class="form-group"><label>Select Date</label><input type="date" id="dailyReportDate"></div><button id="generateDailyReportBtn" class="btn">Generate Daily Report</button></div><div class="card" id="daily-report-output" style="display:none;"><h3>Daily Report Results</h3><div class="report-actions" id="daily-report-actions"></div><div id="daily-report-table-container"></div></div>
@@ -360,20 +360,63 @@
         function displayDailyReport(data, employees) { const outputDiv = document.getElementById('daily-report-output'); const tableContainer = document.getElementById('daily-report-table-container'); const actionsContainer = document.getElementById('daily-report-actions'); if (data.length === 0) { tableContainer.innerHTML = "<p>No records found.</p>"; actionsContainer.innerHTML = ""; } else { const empMap = new Map(employees.map(e => [e.id, e.Name])); let table = `<table id="dailyReportTable" class="report-table"><thead><tr><th>ID</th><th>Name</th><th>In Time</th><th>Out Time</th></tr></thead><tbody>`; data.forEach(rec => { table += `<tr><td>${rec.employeeId}</td><td>${empMap.get(rec.employeeId) || 'N/A'}</td><td>${rec.markIn.toLocaleTimeString()}</td><td>${rec.markOut ? rec.markOut.toLocaleTimeString() : 'N/A'}</td></tr>`; }); table += '</tbody></table>'; tableContainer.innerHTML = table; actionsContainer.innerHTML = `<button class="btn" onclick="downloadTableAsPDF('dailyReportTable', 'Daily_Report')">PDF</button> <button class="btn" onclick="downloadTableAsExcel('dailyReportTable', 'Daily_Report')">Excel</button>`; } outputDiv.style.display = 'block'; }
         
         document.getElementById('generateReportBtn').addEventListener('click', async () => { const startDate = new Date(document.getElementById('startDate').value); const endDate = new Date(document.getElementById('endDate').value); endDate.setHours(23, 59, 59, 999); const { allAttendance, allEmployees } = await fetchAllDataForReport(); const filteredData = allAttendance.filter(rec => rec.markIn >= startDate && rec.markIn <= endDate); displayPayrollReport(filteredData, allEmployees); });
-        function displayPayrollReport(data, employees) { const outputDiv = document.getElementById('report-output'); const tableContainer = document.getElementById('report-table-container'); const actionsContainer = document.getElementById('report-actions'); const payrollSummary = {}; employees.forEach(emp => { payrollSummary[emp.id] = { name: emp.Name, totalDays: 0 }; }); data.forEach(rec => { if (payrollSummary[rec.employeeId] && rec.markIn && rec.markOut) { const durationHours = (rec.markOut - rec.markIn) / 3600000; if (durationHours >= 6) { payrollSummary[rec.employeeId].totalDays += 1; } else if (durationHours > 0) { payrollSummary[rec.employeeId].totalDays += 0.5; } } }); if (employees.length === 0) { tableContainer.innerHTML = "<p>No employees found.</p>"; actionsContainer.innerHTML = ""; } else { let table = `<table id="payrollReportTable" class="report-table"><thead><tr><th>ID</th><th>Name</th><th>Total Days</th></tr></thead><tbody>`; for (const empId in payrollSummary) { const empData = payrollSummary[empId]; table += `<tr><td>${empId}</td><td>${empData.name}</td><td>${empData.totalDays}</td></tr>`; } table += '</tbody></table>'; tableContainer.innerHTML = table; actionsContainer.innerHTML = `<button class="btn" onclick="downloadTableAsPDF('payrollReportTable', 'Payroll_Summary')">PDF</button> <button class="btn" onclick="downloadTableAsExcel('payrollReportTable', 'Payroll_Summary')">Excel</button>`; } outputDiv.style.display = 'block'; }
+        function displayPayrollReport(data, employees) {
+    const outputDiv = document.getElementById('report-output');
+    const tableContainer = document.getElementById('report-table-container');
+    const actionsContainer = document.getElementById('report-actions');
+    const payrollSummary = {};
+
+    // --- MODIFICATION 1: Include DEPT in the summary object ---
+    employees.forEach(emp => {
+        payrollSummary[emp.id] = { name: emp.Name, dept: emp.DEPT || 'N/A', totalDays: 0 };
+    });
+
+    data.forEach(rec => {
+        if (payrollSummary[rec.employeeId] && rec.markIn && rec.markOut) {
+            const durationHours = (rec.markOut - rec.markIn) / 3600000;
+            if (durationHours >= 6) {
+                payrollSummary[rec.employeeId].totalDays += 1;
+            } else if (durationHours > 0) {
+                payrollSummary[rec.employeeId].totalDays += 0.5;
+            }
+        }
+    });
+
+    if (employees.length === 0) {
+        tableContainer.innerHTML = "<p>No employees found.</p>";
+        actionsContainer.innerHTML = "";
+    } else {
+        // --- MODIFICATION 2: Add Department to the table header ---
+        let table = `<table id="payrollReportTable" class="report-table"><thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Total Days</th></tr></thead><tbody>`;
+        
+        for (const empId in payrollSummary) {
+            const empData = payrollSummary[empId];
+            // --- MODIFICATION 3: Add the department data to each row ---
+            table += `<tr><td>${empId}</td><td>${empData.name}</td><td>${empData.dept}</td><td>${empData.totalDays}</td></tr>`;
+        }
+        
+        table += '</tbody></table>';
+        tableContainer.innerHTML = table;
+        actionsContainer.innerHTML = `<button class="btn" onclick="downloadTableAsPDF('payrollReportTable', 'Payroll_Summary_Report')">PDF</button> <button class="btn" onclick="downloadTableAsExcel('payrollReportTable', 'Payroll_Summary_Report')">Excel</button>`;
+    }
+    outputDiv.style.display = 'block';
+}
         
         document.getElementById('generateDetailedReportBtn').addEventListener('click', async () => { const employeeId = document.getElementById('detailedEmployeeId').value.trim().toUpperCase(); const monthYear = document.getElementById('reportMonth').value; if (!employeeId || !monthYear) { return alert('Please provide ID and month.'); } const [year, month] = monthYear.split('-'); const { allAttendance, allEmployees } = await fetchAllDataForReport(); const employeeInfo = allEmployees.find(emp => emp.id === employeeId); if (!employeeInfo) { return alert('Employee ID not found.'); } const employeeRecords = allAttendance.filter(rec => { const recDate = rec.markIn; return rec.employeeId === employeeId && recDate.getFullYear() == year && (recDate.getMonth() + 1) == parseInt(month); }); displayDetailedReport(employeeRecords, employeeInfo, monthYear); });
         function displayDetailedReport(data, employeeInfo, monthYear) { const outputDiv = document.getElementById('detailed-report-output'); const summaryContainer = document.getElementById('detailed-report-summary'); const tableContainer = document.getElementById('detailed-report-table-container'); const actionsContainer = document.getElementById('detailed-report-actions'); outputDiv.style.display = 'block'; if (data.length === 0) { summaryContainer.innerHTML = `<p>No records found for ${employeeInfo.Name} (${employeeInfo.id}) for this month.</p>`; tableContainer.innerHTML = ""; actionsContainer.innerHTML = ""; return; } let totalMilliseconds = 0; let tableHTML = `<table id="detailedReportTable" class="report-table"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th></tr></thead><tbody>`; data.sort((a, b) => a.markIn - b.markIn); data.forEach(rec => { const markInTime = rec.markIn; const markOutTime = rec.markOut; let durationStr = 'N/A'; if (markOutTime) { const durationMs = markOutTime - markInTime; totalMilliseconds += durationMs; const hours = Math.floor(durationMs / 3600000); const minutes = Math.floor((durationMs % 3600000) / 60000); durationStr = `${hours}h ${minutes}m`; } tableHTML += `<tr><td>${rec.date}</td><td>${markInTime.toLocaleTimeString()}</td><td>${markOutTime ? markOutTime.toLocaleTimeString() : 'N/A'}</td><td>${durationStr}</td></tr>`; }); tableHTML += '</tbody></table>'; const totalHours = totalMilliseconds / 3600000; const avgHours = data.length > 0 ? totalHours / data.length : 0; summaryContainer.innerHTML = `<p><strong>Employee:</strong> ${employeeInfo.Name} (${employeeInfo.id})</p><p><strong>Total Days:</strong> ${data.length}</p><p><strong>Total Hours:</strong> ${totalHours.toFixed(2)}</p><p><strong>Avg Hours:</strong> ${avgHours.toFixed(2)}</p>`; tableContainer.innerHTML = tableHTML; const reportTitle = `Detailed_Report_${employeeInfo.id}_${monthYear}`; actionsContainer.innerHTML = `<button class="btn" onclick="downloadDetailedPDF('${reportTitle}')">PDF</button> <button class="btn" onclick="downloadDetailedExcel('${reportTitle}')">Excel</button>`; }
         
         window.downloadTableAsPDF = function(tableId, title) { const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.autoTable({ html: `#${tableId}` }); doc.save(`${title}.pdf`); }
-        window.downloadTableAsExcel = function(tableId, title) { const table = document.getElementById(tableId); const wb = XLSX.utils.table_to_book(table, { sheet: title }); XLSX.writeFile(wb, `${title}.xlsx`); }
+        window.downloadTableAsExcel = function(tableId, title) {
+    const table = document.getElementById(tableId);
+    // --- MODIFICATION: Give the sheet a more descriptive name ---
+    const sheetName = title.replace(/_/g, ' '); // Turns "Payroll_Summary_Report" into "Payroll Summary Report"
+    const wb = XLSX.utils.table_to_book(table, { sheet: sheetName });
+    XLSX.writeFile(wb, `${title}.xlsx`);
+}
         window.downloadDetailedPDF = function(title) { const { jsPDF } = window.jspdf; const doc = new jsPDF(); const summaryText = document.getElementById('detailed-report-summary').innerText; doc.text(summaryText, 14, 20); doc.autoTable({ html: '#detailedReportTable', startY: doc.autoTable.previous.finalY + 10 || 50 }); doc.save(`${title}.pdf`); }
         window.downloadDetailedExcel = function(title) { const table = document.getElementById('detailedReportTable'); const wb = XLSX.utils.table_to_book(table, { sheet: "Detailed Report" }); XLSX.writeFile(wb, `${title}.xlsx`); }
 
         window.addEventListener('hashchange', handleViewChange); handleViewChange();
-
-                window.addEventListener('hashchange', handleViewChange); 
-        handleViewChange();
 
         // --- PWA SERVICE WORKER REGISTRATION ---
         if ('serviceWorker' in navigator) {
